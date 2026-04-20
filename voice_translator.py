@@ -1,8 +1,6 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import speech_recognition as sr
 from deep_translator import GoogleTranslator
-import base64, tempfile, os
 
 st.set_page_config(
     page_title="VoxBridge | AI Translator",
@@ -36,7 +34,9 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap');
 *{box-sizing:border-box;margin:0;padding:0;}
 #MainMenu,footer,header{visibility:hidden;}
-[data-testid="stSidebar"],[data-testid="stSidebarCollapsedControl"],[data-testid="collapsedControl"]{display:none!important;}
+
+/* Note: The CSS rules hiding the sidebar toggler have been completely removed! */
+
 :root{
   --bg:#04060d;--card:rgba(255,255,255,.04);--border:rgba(255,255,255,.08);
   --accent:#00d4b4;--red:#ff6b6b;--gold:#ffd166;--fg:#eef2f7;--muted:#6b7fa3;--dim:#2e3d55;
@@ -92,7 +92,7 @@ st.markdown(f"""
   </div>
 </div>
 <div class='tip'>
-  💡 <b>HOW TO USE:</b> Choose language & direction below, then tap <b>🎙 TAP TO SPEAK</b> and allow mic access.
+  💡 <b>HOW TO USE:</b> Choose language & direction below, then tap the mic icon to record.
 </div>
 """, unsafe_allow_html=True)
 
@@ -114,127 +114,30 @@ if new_lang != st.session_state.sel_lang or new_to_eng != st.session_state.to_en
     st.session_state.to_eng   = new_to_eng
     st.rerun()
 
-# ── BROWSER MIC RECORDER ──────────────────────────────────────
-recorder_html = f"""<!DOCTYPE html><html><head>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
-<style>
-*{{box-sizing:border-box;margin:0;padding:0;}}
-body{{background:transparent;padding:4px;}}
-#btn{{
-  width:100%;padding:17px;border:none;border-radius:14px;
-  background:linear-gradient(135deg,#00d4b4,#00a08a);
-  color:#04060d;font-size:15px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
-  cursor:pointer;transition:all .25s;box-shadow:0 0 28px rgba(0,212,180,.3);
-  font-family:'Syne',sans-serif;
-}}
-#btn:hover{{transform:translateY(-2px);box-shadow:0 0 50px rgba(0,212,180,.5);}}
-#btn.recording{{background:linear-gradient(135deg,#ff6b6b,#cc4444);box-shadow:0 0 28px rgba(255,107,107,.4);}}
-#status{{
-  margin-top:10px;padding:12px 16px;background:rgba(255,255,255,.03);
-  border:1px solid rgba(255,255,255,.08);border-radius:10px;text-align:center;
-  font-family:'Space Mono',monospace;font-size:11px;color:#6b7fa3;display:none;
-}}
-.bars{{display:inline-flex;align-items:center;gap:3px;height:18px;vertical-align:middle;margin-right:8px;}}
-.b{{width:3px;border-radius:2px;background:#00d4b4;animation:eq .9s infinite ease-in-out;}}
-.b:nth-child(1){{height:5px;animation-delay:0s;}}
-.b:nth-child(2){{height:10px;animation-delay:.1s;}}
-.b:nth-child(3){{height:16px;animation-delay:.2s;background:#ff6b6b;}}
-.b:nth-child(4){{height:10px;animation-delay:.3s;}}
-.b:nth-child(5){{height:5px;animation-delay:.4s;}}
-@keyframes eq{{0%,100%{{transform:scaleY(1)}}50%{{transform:scaleY(2.2)}}}}
-.spin{{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,209,102,.2);border-top:2px solid #ffd166;border-radius:50%;animation:sp .8s linear infinite;vertical-align:middle;margin-right:8px;}}
-@keyframes sp{{to{{transform:rotate(360deg)}}}}
-</style></head><body>
-<button id="btn" onclick="toggle()">🎙&nbsp; TAP TO SPEAK</button>
-<div id="status"></div>
-<script>
-let rec, chunks=[], going=false, silTimer=null;
-
-async function toggle(){{
-  if(going){{ stop(); return; }}
-  start();
-}}
-
-async function start(){{
-  const btn=document.getElementById('btn'), st=document.getElementById('status');
-  try{{
-    const stream=await navigator.mediaDevices.getUserMedia({{audio:true}});
-    rec=new MediaRecorder(stream);
-    chunks=[];
-    rec.ondataavailable=e=>{{if(e.data.size>0)chunks.push(e.data);}};
-    rec.onstop=()=>{{
-      stream.getTracks().forEach(t=>t.stop());
-      st.innerHTML='<span class="spin"></span><span style="color:#ffd166">PROCESSING...</span>';
-      const blob=new Blob(chunks,{{type:'audio/webm'}});
-      const fr=new FileReader();
-      fr.onloadend=()=>{{
-        Streamlit.setComponentValue(fr.result.split(',')[1]);
-      }};
-      fr.readAsDataURL(blob);
-      btn.className=''; btn.innerHTML='🎙&nbsp; TAP TO SPEAK'; going=false;
-    }};
-
-    // Silence detection
-    const ctx=new AudioContext(), src=ctx.createMediaStreamSource(stream);
-    const ana=ctx.createAnalyser(); ana.fftSize=512; src.connect(ana);
-    const dat=new Uint8Array(ana.frequencyBinCount);
-    let silStart=null;
-    function chk(){{
-      if(!going)return;
-      ana.getByteFrequencyData(dat);
-      const vol=dat.reduce((a,b)=>a+b,0)/dat.length;
-      if(vol<5){{ if(!silStart)silStart=Date.now(); else if(Date.now()-silStart>2500){{stop();return;}} }}
-      else silStart=null;
-      requestAnimationFrame(chk);
-    }}
-
-    rec.start(); going=true;
-    btn.className='recording'; btn.innerHTML='⏹&nbsp; RECORDING — tap to stop';
-    st.style.display='block';
-    st.innerHTML='<span class="bars"><span class="b"></span><span class="b"></span><span class="b"></span><span class="b"></span><span class="b"></span></span><span style="color:#00d4b4">LISTENING — {in_lbl.upper()} (auto-stops on silence)</span>';
-    chk();
-  }}catch(e){{
-    st.style.display='block';
-    st.innerHTML='<span style="color:#ff6b6b">⚠ Mic access denied. Please allow microphone access in your browser settings.</span>';
-  }}
-}}
-
-function stop(){{
-  if(rec&&going){{ rec.stop(); going=false; }}
-}}
-</script>
-</body></html>"""
-
-audio_b64 = components.html(recorder_html, height=120)
+# ── NATIVE MIC RECORDER ──────────────────────────────────────
+audio_file = st.audio_input("🎙 TAP TO RECORD")
 
 # ── PROCESS RECEIVED AUDIO ────────────────────────────────────
-if audio_b64 and audio_b64 != st.session_state.get('_last_audio',''):
-    st.session_state._last_audio = audio_b64
+if audio_file is not None and audio_file != st.session_state.get('_last_audio', None):
+    st.session_state._last_audio = audio_file
+    
     with st.spinner("Transcribing & translating..."):
         try:
-            audio_bytes = base64.b64decode(audio_b64)
-            with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as f:
-                f.write(audio_bytes); tmp_webm = f.name
-
-            tmp_wav = tmp_webm.replace(".webm",".wav")
-            ret = os.system(f"ffmpeg -y -i {tmp_webm} {tmp_wav} -loglevel quiet 2>/dev/null")
-
-            if ret != 0 or not os.path.exists(tmp_wav):
-                st.error("⚠ Audio conversion failed. ffmpeg may not be available.")
-            else:
-                r = sr.Recognizer()
-                with sr.AudioFile(tmp_wav) as src:
-                    audio_rec = r.record(src)
-                spoken = r.recognize_google(audio_rec, language=stt_code)
-                translated = GoogleTranslator(source='auto', target=mt_code).translate(spoken)
-                st.session_state.history.insert(0,{
-                    "input_label":in_lbl,"output_label":out_lbl,
-                    "original_text":spoken,"translated_text":translated
-                })
-                st.success(f"✓ **{out_lbl}:** {translated}")
-            for p in [tmp_webm, tmp_wav]:
-                try: os.unlink(p)
-                except: pass
+            r = sr.Recognizer()
+            with sr.AudioFile(audio_file) as src:
+                audio_rec = r.record(src)
+                
+            spoken = r.recognize_google(audio_rec, language=stt_code)
+            translated = GoogleTranslator(source='auto', target=mt_code).translate(spoken)
+            
+            st.session_state.history.insert(0,{
+                "input_label":in_lbl,
+                "output_label":out_lbl,
+                "original_text":spoken,
+                "translated_text":translated
+            })
+            st.success(f"✓ **{out_lbl}:** {translated}")
+            
         except sr.UnknownValueError:
             st.warning("🎤 Could not understand. Speak clearly and try again.")
         except Exception as e:
@@ -269,7 +172,7 @@ else:
 with st.expander("📊 Architectural Note (Lecturer)"):
     st.markdown("""
 **Pre-Trained Foundation Models via API Pipelines**
-- **Browser MediaRecorder API** — captures mic audio directly on the user's device (no server mic needed)
+- **Streamlit Native Audio** — captures mic audio directly natively on the browser
 - **Google Web Speech API** — Speech-to-Text, trained on millions of audio hours
 - **Google Translate Neural MT** — trained on billions of sentence pairs
 
