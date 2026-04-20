@@ -1,6 +1,6 @@
 import streamlit as st
 import speech_recognition as sr
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -10,7 +10,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-translator = Translator()
 
 if 'history' not in st.session_state:
     st.session_state.history = []
@@ -665,13 +664,13 @@ if start_recording:
             """, unsafe_allow_html=True)
 
             spoken_text  = r.recognize_google(audio, language=stt_lang_code)
-            translation  = translator.translate(spoken_text, dest=mt_target_code)
+            translation = GoogleTranslator(source='auto', target=mt_target_code).translate(spoken_text)
 
             st.session_state.history.insert(0, {
                 "input_label":    input_label,
                 "output_label":   output_label,
                 "original_text":  spoken_text,
-                "translated_text": translation.text
+                "translated_text": translation
             })
 
             status_placeholder.markdown("""
